@@ -86,20 +86,23 @@ class WebResearchTool:
                 async with session.get(reader_url, headers=headers, timeout=30) as response:
                     if response.status == 200:
                         response_json = await response.json()
-                        # Content is expected in 'data' field of the Jina envelope
-                        # Title might be in 'meta' or needs to be inferred
-                        content = response_json.get("data", "")
+                        # Retrieve raw data and ensure content_for_return is a string
+                        raw_data_from_jina = response_json.get("data", "")
+                        content_for_return = raw_data_from_jina if isinstance(raw_data_from_jina, str) else json.dumps(raw_data_from_jina)
+
+                        # Title extraction logic
                         title = response_json.get("meta", {}).get("title", "")
-                        # If title is not directly available, could try to extract from markdown content if needed
-                        if not title and content:
-                            # Basic title extraction from first markdown H1
-                            lines = content.split('\n')
+                        if not title and isinstance(raw_data_from_jina, str) and raw_data_from_jina:
+                            lines = raw_data_from_jina.split('\n')
                             if lines and lines[0].startswith("# "):
                                 title = lines[0][2:]
+                        elif not isinstance(raw_data_from_jina, str):
+                            # Optional: Log that raw_data_from_jina was not a string
+                            print(f"Jina Reader returned non-string data for URL {url}: {type(raw_data_from_jina)}")
 
                         return {
                             "url": url,
-                            "content": content,
+                            "content": content_for_return, # Use the stringified version
                             "title": title,
                             "success": True,
                         }

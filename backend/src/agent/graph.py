@@ -6,7 +6,7 @@ from langgraph.types import Send
 from langgraph.graph import StateGraph
 from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
-from openai import AzureOpenAI
+from openai import OpenAI
 
 from agent.state import (
     OverallState,
@@ -32,14 +32,15 @@ from agent.web_research import enhance_ai_research_with_real_data
 
 load_dotenv()
 
-if os.getenv("AZURE_OPENAI_API_KEY") is None:
-    raise ValueError("AZURE_OPENAI_API_KEY is not set")
+if os.getenv("OPENAI_API_KEY") is None:
+    raise ValueError("OPENAI_API_KEY is not set")
+if os.getenv("OPENAI_API_BASE") is None:
+    raise ValueError("OPENAI_API_BASE is not set")
 
-# Azure OpenAI client
-openai_client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+# OpenAI client
+openai_client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_API_BASE"),
 )
 
 

@@ -17,6 +17,8 @@ dependencies = [
     "langgraph-cli",
     "langgraph-api",
     "fastapi",
+    "aiohttp>=3.8.0,<4.0.0",
+    "beautifulsoup4>=4.9.0,<4.13.0",
 ]
 
 

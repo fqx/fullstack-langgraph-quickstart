@@ -6,7 +6,7 @@ from langgraph.types import Send
 from langgraph.graph import StateGraph
 from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
-from openai import AzureOpenAI
+from openai import AsyncOpenAI
 
 from agent.state import (
     OverallState,
@@ -32,19 +32,18 @@ from agent.web_research import enhance_ai_research_with_real_data
 
 load_dotenv()
 
-if os.getenv("AZURE_OPENAI_API_KEY") is None:
-    raise ValueError("AZURE_OPENAI_API_KEY is not set")
+if os.getenv("OPENAI_API_KEY") is None:
+    raise ValueError("OPENAI_API_KEY is not set")
 
-# Azure OpenAI client
-openai_client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+# OpenAI client
+openai_client = AsyncOpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1"),
 )
 
 
 # Nodes
-def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
+async def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
     """LangGraph node that generates a search queries based on the User's question using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     if state.get("initial_search_query_count") is None:
@@ -57,19 +56,32 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         number_queries=state["initial_search_query_count"],
     )
     # Call Azure OpenAI o3 model for query generation
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=configurable.query_generator_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=1.0,
         # max_tokens=256,
     )
-    # Parse output (assuming output is a JSON list of queries)
+    # Parse output and extract the query list from JSON response
     import json
     try:
-        queries = json.loads(completion.choices[0].message.content)
-    except Exception:
+        response_json = json.loads(completion.choices[0].message.content)
+        # Extract the query list from the JSON structure
+        if isinstance(response_json, dict) and "query" in response_json:
+            queries = response_json["query"]
+            # Ensure queries is a list
+            if isinstance(queries, str):
+                queries = [queries]
+        else:
+            # Fallback if JSON structure is unexpected
+            queries = [completion.choices[0].message.content]
+    except Exception as e:
+        print(f"Error parsing query JSON: {e}")
+        # Fallback to treating the entire response as a single query
         queries = [completion.choices[0].message.content]
+
     return {"query_list": queries}
+
 
 
 def continue_to_web_research(state: QueryGenerationState):
@@ -77,10 +89,29 @@ def continue_to_web_research(state: QueryGenerationState):
 
     This is used to spawn n number of web research nodes, one for each search query.
     """
+    query_list = state.get("query_list", [])
+
+    # Ensure query_list is actually a list of strings
+    if not isinstance(query_list, list):
+        query_list = [str(query_list)]
+
+    # Filter out empty queries and ensure all items are strings
+    valid_queries = []
+    for query in query_list:
+        if isinstance(query, str) and query.strip():
+            valid_queries.append(query.strip())
+        elif query:  # Non-string but truthy value
+            valid_queries.append(str(query).strip())
+
+    if not valid_queries:
+        # Fallback to a default query if no valid queries found
+        valid_queries = ["research topic information"]
+
     return [
         Send("web_research", {"search_query": search_query, "id": int(idx)})
-        for idx, search_query in enumerate(state["query_list"])
+        for idx, search_query in enumerate(valid_queries)
     ]
+
 
 
 async def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
@@ -92,7 +123,7 @@ async def web_research(state: WebSearchState, config: RunnableConfig) -> Overall
     )
     
     # Call Azure OpenAI o3 model for initial web research
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=configurable.query_generator_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=0,
@@ -132,7 +163,7 @@ async def web_research(state: WebSearchState, config: RunnableConfig) -> Overall
     }
 
 
-def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
+async def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     """LangGraph node that identifies knowledge gaps and generates potential follow-up queries using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     state["research_loop_count"] = state.get("research_loop_count", 0) + 1
@@ -143,11 +174,11 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=reasoning_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=1.0,
-        max_completion_tokens=50000,
+        max_completion_tokens=32000,
     )
     import json
     try:
@@ -207,7 +238,7 @@ def evaluate_research(
         ]
 
 
-def finalize_answer(state: OverallState, config: RunnableConfig):
+async def finalize_answer(state: OverallState, config: RunnableConfig):
     """LangGraph node that finalizes the research summary using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     reasoning_model = state.get("reasoning_model") or configurable.reasoning_model
@@ -217,7 +248,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         research_topic=get_research_topic(state["messages"]),
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=reasoning_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=0,

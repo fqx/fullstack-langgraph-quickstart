@@ -62,13 +62,26 @@ async def generate_query(state: OverallState, config: RunnableConfig) -> QueryGe
         # temperature=1.0,
         # max_tokens=256,
     )
-    # Parse output (assuming output is a JSON list of queries)
+    # Parse output and extract the query list from JSON response
     import json
     try:
-        queries = json.loads(completion.choices[0].message.content)
-    except Exception:
+        response_json = json.loads(completion.choices[0].message.content)
+        # Extract the query list from the JSON structure
+        if isinstance(response_json, dict) and "query" in response_json:
+            queries = response_json["query"]
+            # Ensure queries is a list
+            if isinstance(queries, str):
+                queries = [queries]
+        else:
+            # Fallback if JSON structure is unexpected
+            queries = [completion.choices[0].message.content]
+    except Exception as e:
+        print(f"Error parsing query JSON: {e}")
+        # Fallback to treating the entire response as a single query
         queries = [completion.choices[0].message.content]
+
     return {"query_list": queries}
+
 
 
 def continue_to_web_research(state: QueryGenerationState):
@@ -76,10 +89,29 @@ def continue_to_web_research(state: QueryGenerationState):
 
     This is used to spawn n number of web research nodes, one for each search query.
     """
+    query_list = state.get("query_list", [])
+
+    # Ensure query_list is actually a list of strings
+    if not isinstance(query_list, list):
+        query_list = [str(query_list)]
+
+    # Filter out empty queries and ensure all items are strings
+    valid_queries = []
+    for query in query_list:
+        if isinstance(query, str) and query.strip():
+            valid_queries.append(query.strip())
+        elif query:  # Non-string but truthy value
+            valid_queries.append(str(query).strip())
+
+    if not valid_queries:
+        # Fallback to a default query if no valid queries found
+        valid_queries = ["research topic information"]
+
     return [
         Send("web_research", {"search_query": search_query, "id": int(idx)})
-        for idx, search_query in enumerate(state["query_list"])
+        for idx, search_query in enumerate(valid_queries)
     ]
+
 
 
 async def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:

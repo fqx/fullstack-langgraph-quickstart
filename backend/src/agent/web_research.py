@@ -29,8 +29,8 @@ class WebResearchTool:
         if not self.use_jina_reader or not self.jina_api_key:
             return []
 
-        # Use Jina's search endpoint with proper URL format
-        search_url = f"https://s.jina.ai/{query}"
+        # Use Jina's search endpoint with proper URL format and gl=US parameter
+        search_url = f"https://s.jina.ai/{query}?gl=US"
         headers = {
             "Authorization": f"Bearer {self.jina_api_key}",
             "Accept": "application/json",

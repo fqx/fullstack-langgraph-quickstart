@@ -74,7 +74,7 @@ class WebResearchTool:
         if not self.use_jina_reader or not self.jina_api_key:
             return {"url": url, "content": "", "title": "", "success": False, "error": "Jina Reader not configured"}
 
-        reader_url = f"https://s.jina.ai/{url}" # Jina URL format
+        reader_url = f"https://r.jina.ai/{url}" # Jina URL format
         headers = {
             "Authorization": f"Bearer {self.jina_api_key}",
             "Accept": "application/json", # Expecting JSON envelope

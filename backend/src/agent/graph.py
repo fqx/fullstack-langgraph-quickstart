@@ -34,13 +34,11 @@ load_dotenv()
 
 if os.getenv("OPENAI_API_KEY") is None:
     raise ValueError("OPENAI_API_KEY is not set")
-if os.getenv("OPENAI_API_BASE") is None:
-    raise ValueError("OPENAI_API_BASE is not set")
 
 # OpenAI client
 openai_client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_API_BASE"),
+    base_url=os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1"),
 )
 
 

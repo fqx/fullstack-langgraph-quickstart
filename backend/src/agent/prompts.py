@@ -52,31 +52,28 @@ Research Topic:
 reflection_instructions = """You are an expert research assistant analyzing summaries about "{research_topic}".
 
 Instructions:
-- Identify knowledge gaps or areas that need deeper exploration and generate a follow-up query. (1 or multiple).
-- If provided summaries are sufficient to answer the user's question, don't generate a follow-up query.
-- If there is a knowledge gap, generate a follow-up query that would help expand your understanding.
+- Identify knowledge gaps or areas that need deeper exploration and generate follow-up search queries (1 or multiple).
+- If provided summaries are sufficient to answer the user's question, don't generate follow-up queries.
+- If there is a knowledge gap, generate short, specific search queries (2-5 words each) that would help expand your understanding.
 - Focus on technical details, implementation specifics, or emerging trends that weren't fully covered.
 
 Requirements:
-- Ensure the follow-up query is self-contained and includes necessary context for web search.
+- Generate concise search keywords/phrases, not full questions
+- Each query should be 2-5 words for optimal search results
+- Include necessary context keywords for web search
 
 Output Format:
 - Format your response as a JSON object with these exact keys:
    - "is_sufficient": true or false
    - "knowledge_gap": Describe what information is missing or needs clarification
-   - "follow_up_queries": Write a specific question to address this gap. IMPORTANT: The "query" field MUST always be an array of strings in English, even if there's only one query: ["single query here"]
-
+   - "follow_up_queries": Array of short search keywords/phrases. IMPORTANT: The "follow_up_queries" field MUST always be an array of strings in English, even if there's only one query: ["short keywords here"]
 
 Example:
 ```
-{{
-    "is_sufficient": true, // or false
-    "knowledge_gap": "The summary lacks information about performance metrics and benchmarks", // "" if is_sufficient is true
-    "follow_up_queries": ["What are typical performance benchmarks and metrics used to evaluate [specific technology]?"] // [] if is_sufficient is true
-}}
+{{ "is_sufficient": false, "knowledge_gap": "The summary lacks information about performance metrics and benchmarks", "follow_up_queries": ["performance benchmarks metrics", "speed comparison tests", "memory usage optimization"] }}
 ```
 
-Reflect carefully on the Summaries to identify knowledge gaps and produce a follow-up query. Then, produce your output following this JSON format:
+Reflect carefully on the Summaries to identify knowledge gaps and produce short search queries. Then, produce your output following this JSON format:
 
 Summaries:
 {summaries}

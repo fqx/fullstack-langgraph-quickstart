@@ -6,7 +6,7 @@ from langgraph.types import Send
 from langgraph.graph import StateGraph
 from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from agent.state import (
     OverallState,
@@ -36,14 +36,14 @@ if os.getenv("OPENAI_API_KEY") is None:
     raise ValueError("OPENAI_API_KEY is not set")
 
 # OpenAI client
-openai_client = OpenAI(
+openai_client = AsyncOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     base_url=os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1"),
 )
 
 
 # Nodes
-def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
+async def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerationState:
     """LangGraph node that generates a search queries based on the User's question using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     if state.get("initial_search_query_count") is None:
@@ -56,7 +56,7 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         number_queries=state["initial_search_query_count"],
     )
     # Call Azure OpenAI o3 model for query generation
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=configurable.query_generator_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=1.0,
@@ -91,7 +91,7 @@ async def web_research(state: WebSearchState, config: RunnableConfig) -> Overall
     )
     
     # Call Azure OpenAI o3 model for initial web research
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=configurable.query_generator_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=0,
@@ -131,7 +131,7 @@ async def web_research(state: WebSearchState, config: RunnableConfig) -> Overall
     }
 
 
-def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
+async def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     """LangGraph node that identifies knowledge gaps and generates potential follow-up queries using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     state["research_loop_count"] = state.get("research_loop_count", 0) + 1
@@ -142,7 +142,7 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=reasoning_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=1.0,
@@ -206,7 +206,7 @@ def evaluate_research(
         ]
 
 
-def finalize_answer(state: OverallState, config: RunnableConfig):
+async def finalize_answer(state: OverallState, config: RunnableConfig):
     """LangGraph node that finalizes the research summary using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     reasoning_model = state.get("reasoning_model") or configurable.reasoning_model
@@ -216,7 +216,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         research_topic=get_research_topic(state["messages"]),
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
-    completion = openai_client.chat.completions.create(
+    completion = await openai_client.chat.completions.create(
         model=reasoning_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=0,

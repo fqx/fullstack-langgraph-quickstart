@@ -146,7 +146,7 @@ async def reflection(state: OverallState, config: RunnableConfig) -> ReflectionS
         model=reasoning_model,
         messages=[{"role": "system", "content": formatted_prompt}],
         # temperature=1.0,
-        max_completion_tokens=50000,
+        max_completion_tokens=32000,
     )
     import json
     try:

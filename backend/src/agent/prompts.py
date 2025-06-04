@@ -25,7 +25,7 @@ Format:
 Example:
 
 Topic: What revenue grew more last year apple stock or the number of people buying an iphone
-```json
+```
 {{
     "rationale": "To answer this comparative growth question accurately, we need specific data points on Apple's stock performance and iPhone sales metrics. These queries target the precise financial information needed: company revenue trends, product-specific unit sales figures, and stock price movement over the same fiscal period for direct comparison.",
     "query": ["Apple total revenue growth fiscal year 2024", "iPhone unit sales growth fiscal year 2024", "Apple stock price growth fiscal year 2024"],
@@ -64,10 +64,11 @@ Output Format:
 - Format your response as a JSON object with these exact keys:
    - "is_sufficient": true or false
    - "knowledge_gap": Describe what information is missing or needs clarification
-   - "follow_up_queries": Write a specific question to address this gap
+   - "follow_up_queries": Write a specific question to address this gap. IMPORTANT: The "query" field MUST always be an array of strings in English, even if there's only one query: ["single query here"]
+
 
 Example:
-```json
+```
 {{
     "is_sufficient": true, // or false
     "knowledge_gap": "The summary lacks information about performance metrics and benchmarks", // "" if is_sufficient is true

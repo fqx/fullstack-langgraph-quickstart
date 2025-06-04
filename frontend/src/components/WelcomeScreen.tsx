@@ -26,7 +26,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     </div>
     <div className="w-full mt-6 max-w-3xl">
       <InputForm
-        onSubmit={(inputValue, model) => handleSubmit(inputValue, "medium", model)}
+        onSubmit={handleSubmit}
         isLoading={isLoading}
         onCancel={onCancel}
         hasHistory={false}

@@ -7,6 +7,8 @@ from langgraph.graph import StateGraph
 from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
 from openai import AsyncOpenAI
+from typing import List, Union
+import logging
 
 from agent.state import (
     OverallState,
@@ -59,6 +61,7 @@ async def generate_query(state: OverallState, config: RunnableConfig) -> QueryGe
     completion = await openai_client.chat.completions.create(
         model=configurable.query_generator_model,
         messages=[{"role": "system", "content": formatted_prompt}],
+        response_format={ "type": "json_object" },
         # temperature=1.0,
         # max_tokens=256,
     )
@@ -167,75 +170,143 @@ async def reflection(state: OverallState, config: RunnableConfig) -> ReflectionS
     """LangGraph node that identifies knowledge gaps and generates potential follow-up queries using Azure OpenAI."""
     configurable = Configuration.from_runnable_config(config)
     state["research_loop_count"] = state.get("research_loop_count", 0) + 1
-    reasoning_model = state.get("reasoning_model") or configurable.reasoning_model
+    reflection_model = state.get("reflection_model") or configurable.reflection_model
     current_date = get_current_date()
+
+    # 使用现有的反思提示词
     formatted_prompt = reflection_instructions.format(
         current_date=current_date,
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
+
+    # 添加调试日志
+    logging.info("=" * 50)
+    logging.info("REFLECTION - 开始反思分析")
+    logging.info(f"研究主题: {get_research_topic(state['messages'])}")
+    logging.info(f"研究结果数量: {len(state.get('web_research_result', []))}")
+
     completion = await openai_client.chat.completions.create(
-        model=reasoning_model,
+        model=reflection_model,
         messages=[{"role": "system", "content": formatted_prompt}],
-        # temperature=1.0,
+        response_format={"type": "json_object"},
         max_completion_tokens=32000,
     )
+
+    # 记录LLM原始响应
+    raw_response = completion.choices[0].message.content
+    logging.info(f"LLM原始响应: {raw_response}")
+
     import json
     try:
-        result = json.loads(completion.choices[0].message.content)
-    except Exception:
+        result = json.loads(raw_response)
+        logging.info(f"解析成功: {result}")
+    except Exception as e:
+        logging.error(f"JSON解析失败: {e}")
         result = {
             "is_sufficient": False,
-            "knowledge_gap": "",
+            "knowledge_gap": f"解析错误: {str(e)}",
             "follow_up_queries": [],
         }
+
+    # 确保follow_up_queries是列表
+    follow_up_queries = result.get("follow_up_queries", [])
+    if not isinstance(follow_up_queries, list):
+        follow_up_queries = []
+        logging.warning("follow_up_queries不是列表，已重置为空列表")
+
+    logging.info(f"是否足够: {result.get('is_sufficient', False)}")
+    logging.info(f"知识缺口: {result.get('knowledge_gap', '')}")
+    logging.info(f"后续查询数量: {len(follow_up_queries)}")
+    for idx, query in enumerate(follow_up_queries):
+        logging.info(f"  查询 {idx + 1}: {query}")
+
+    logging.info("REFLECTION - 反思完成")
+    logging.info("=" * 50)
+
     return {
         "is_sufficient": result.get("is_sufficient", False),
         "knowledge_gap": result.get("knowledge_gap", ""),
-        "follow_up_queries": result.get("follow_up_queries", []),
+        "follow_up_queries": follow_up_queries,
         "research_loop_count": state["research_loop_count"],
-        "number_of_ran_queries": len(state["search_query"]),
+        "number_of_ran_queries": len(state.get("search_query", [])),
     }
 
 
 def evaluate_research(
     state: ReflectionState,
     config: RunnableConfig,
-) -> OverallState:
-    """LangGraph routing function that determines the next step in the research flow.
-
-    Controls the research loop by deciding whether to continue gathering information
-    or to finalize the summary based on the configured maximum number of research loops.
-
-    Args:
-        state: Current graph state containing the research loop count
-        config: Configuration for the runnable, including max_research_loops setting
-
-    Returns:
-        String literal indicating the next node to visit ("web_research" or "finalize_summary")
+) -> Union[str, List[Send]]:
     """
-    configurable = Configuration.from_runnable_config(config)
-    max_research_loops = (
-        state.get("max_research_loops")
-        if state.get("max_research_loops") is not None
-        else configurable.max_research_loops
-    )
-    
-    if (state["is_sufficient"] or 
-        state["research_loop_count"] >= max_research_loops or
-        (not state["is_sufficient"] and not state["follow_up_queries"])):
+    评估研究进度并决定下一步行动：继续研究或生成最终答案
+    """
+    import logging
+
+    # 获取配置参数
+    configuration = Configuration.from_runnable_config(config)
+    max_research_loops = getattr(configuration, 'max_research_loops', 3)
+
+    # 获取当前状态信息
+    follow_up_queries = state.get("follow_up_queries", [])
+    number_of_ran_queries = state.get("number_of_ran_queries", 0)
+    research_loop_count = state.get("research_loop_count", 0)  # 循环次数
+    reflection_summary = state.get("reflection_summary", "")
+
+    # 详细调试日志
+    logging.info("=" * 50)
+    logging.info("EVALUATE_RESEARCH - 开始评估")
+    logging.info(f"当前研究循环次数: {research_loop_count}")
+    logging.info(f"最大研究循环次数: {max_research_loops}")
+    logging.info(f"当前已执行查询次数: {number_of_ran_queries}")
+    logging.info(f"待处理的后续查询数量: {len(follow_up_queries)}")
+    logging.info(f"后续查询列表: {follow_up_queries}")
+    logging.info(f"反思总结: {reflection_summary[:200]}...")
+
+    # 检查是否达到最大循环次数
+    if research_loop_count >= max_research_loops:
+        logging.warning(f"已达到最大研究循环次数 ({max_research_loops})，强制进入最终答案阶段")
         return "finalize_answer"
-    else:
-        return [
-            Send(
-                "web_research",
-                {
-                    "search_query": follow_up_query,
-                    "id": state["number_of_ran_queries"] + int(idx),
-                },
-            )
-            for idx, follow_up_query in enumerate(state["follow_up_queries"])
-        ]
+
+    # 检查是否有有效的后续查询
+    if not follow_up_queries:
+        logging.info("没有后续查询，进入最终答案阶段")
+        return "finalize_answer"
+
+    # 过滤空查询
+    valid_queries = [q.strip() for q in follow_up_queries if q and q.strip()]
+
+    if not valid_queries:
+        logging.info("所有后续查询都为空，进入最终答案阶段")
+        return "finalize_answer"
+
+    # 限制并发查询数量
+    max_concurrent_queries = getattr(configuration, 'max_concurrent_queries', 3)
+    limited_queries = valid_queries[:max_concurrent_queries]
+
+    logging.info(f"准备执行 {len(limited_queries)} 个并行查询（第 {research_loop_count + 1} 轮循环）")
+    for idx, query in enumerate(limited_queries):
+        logging.info(f"  查询 {idx + 1}: {query}")
+
+    # 创建并行研究任务
+    research_tasks = []
+    for idx, follow_up_query in enumerate(limited_queries):
+        task = Send(
+            "web_research",
+            {
+                "search_query": follow_up_query,
+                "id": number_of_ran_queries + idx + 1,
+                "research_loop_count": research_loop_count + 1,  # 传递循环计数
+            },
+        )
+        research_tasks.append(task)
+        logging.info(f"创建研究任务 ID: {number_of_ran_queries + idx + 1}, 查询: {follow_up_query}")
+
+    logging.info(f"返回 {len(research_tasks)} 个并行研究任务")
+    logging.info("EVALUATE_RESEARCH - 评估完成")
+    logging.info("=" * 50)
+
+    return research_tasks
+
 
 
 async def finalize_answer(state: OverallState, config: RunnableConfig):

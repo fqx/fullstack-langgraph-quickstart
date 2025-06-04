@@ -1,17 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { SquarePen, Send, StopCircle, Cpu, Zap } from "lucide-react";
+import { SquarePen, Send, StopCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface InputFormProps {
-  onSubmit: (inputValue: string, model: string) => void;
+  onSubmit: (inputValue: string) => void;
   onCancel: () => void;
   isLoading: boolean;
   hasHistory: boolean;
@@ -24,12 +17,11 @@ export const InputForm: React.FC<InputFormProps> = ({
   hasHistory,
 }) => {
   const [internalInputValue, setInternalInputValue] = useState("");
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-4.1");
 
   const handleInternalSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!internalInputValue.trim()) return;
-    onSubmit(internalInputValue, selectedModel);
+    onSubmit(internalInputValue);
     setInternalInputValue("");
   };
 
@@ -50,43 +42,19 @@ export const InputForm: React.FC<InputFormProps> = ({
       className="flex flex-col gap-3 p-4"
     >
       <div
-        className={`flex flex-col gap-3 text-white rounded-2xl ${
+        className={`flex flex-row items-center justify-between text-white rounded-2xl ${
           hasHistory ? "rounded-br-lg" : ""
         } break-words min-h-7 bg-neutral-700/90 backdrop-blur-sm border border-neutral-600/50 px-4 pt-3 shadow-lg`}
       >
-        <div className="flex items-center gap-2">
-          <Textarea
-            value={internalInputValue}
-            onChange={(e) => setInternalInputValue(e.target.value)}
-            onKeyDown={handleInternalKeyDown}
-            placeholder="Who won the Euro 2024 and scored the most goals?"
-            className="w-full text-neutral-100 placeholder-neutral-400 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none bg-transparent md:text-base min-h-[56px] max-h-[200px]"
-            rows={1}
-          />
-          <Select value={selectedModel} onValueChange={setSelectedModel}>
-            <SelectTrigger className="w-[180px] bg-neutral-700/90 border-neutral-600/50 text-neutral-300 hover:bg-neutral-600/90">
-              <SelectValue placeholder="Select model" />
-            </SelectTrigger>
-            <SelectContent className="bg-neutral-700 border-neutral-600 text-neutral-300">
-              <SelectItem value="gpt-4.1" className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer">
-                <div className="flex items-center">
-                  <Cpu className="h-4 w-4 mr-2 text-green-400" /> gpt-4.1
-                </div>
-              </SelectItem>
-              <SelectItem value="gpt-4.1-mini" className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer">
-                <div className="flex items-center">
-                  <Cpu className="h-4 w-4 mr-2 text-teal-400" /> gpt-4.1-mini
-                </div>
-              </SelectItem>
-              <SelectItem value="o4-mini" className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer">
-                <div className="flex items-center">
-                  <Zap className="h-4 w-4 mr-2 text-orange-400" /> o4-mini
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex justify-end -mt-1">
+        <Textarea
+          value={internalInputValue}
+          onChange={(e) => setInternalInputValue(e.target.value)}
+          onKeyDown={handleInternalKeyDown}
+          placeholder="Who won the Euro 2024 and scored the most goals?"
+          className="w-full text-neutral-100 placeholder-neutral-400 resize-none border-0 focus:outline-none focus:ring-0 outline-none focus-visible:ring-0 shadow-none bg-transparent md:text-base min-h-[56px] max-h-[200px]"
+          rows={1}
+        />
+        <div className="-mt-3">
           {isLoading ? (
             <Button
               type="button"
